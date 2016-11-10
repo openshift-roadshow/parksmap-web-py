@@ -1,0 +1,5 @@
+aiohttp
+sockjs
+stompest
+powershift
+requests
