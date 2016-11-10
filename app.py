@@ -272,6 +272,11 @@ async def data_within(request):
 
 app.router.add_get('/ws/data/within', data_within)
 
+async def healthz(request):
+    return web.json_response('OK')
+
+app.router.add_get('/ws/healthz', healthz)
+
 async def index(request):
     return web.HTTPFound('/index.html')
 
