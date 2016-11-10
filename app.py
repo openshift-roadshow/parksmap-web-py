@@ -103,6 +103,13 @@ async def poll_services():
 
         # Query details for each backend service. The end point is
         # combination of service name and port.
+        #
+        # XXX This is currently polling the backend service each time
+        # for details. This will cause Python backend to be kept alive
+        # and will not restart due to inactivity. Even if details don't
+        # change we aren't currently update user interface anyway as
+        # notifications not working and we aren't looking for any
+        # differences in details, only if a backed was added or removed.
 
         for endpoint in endpoints:
             try:
@@ -129,8 +136,10 @@ async def poll_services():
                 # If the service details didn't include an 'id' fill
                 # it in with the name of the service.
 
+                name = endpoint.split(':')[0]
+
                 if 'id' not in info:
-                    info['id'] = endpoint.split(':')[0]
+                    info['id'] = name
 
                 details[info['id']] = (endpoint, info)
 
