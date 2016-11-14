@@ -129,7 +129,7 @@ async def poll_services():
                 info.setdefault('center', {"latitude":"0.0","longitude":"0.0"})
                 info.setdefault('zoom', 1)
                 info.setdefault('maxZoom', 1)
-                info.setdefault('type', 'marker')
+                info.setdefault('type', 'cluster')
                 info.setdefault('visible', 'true')
                 info.setdefault('scope', 'all')
 
