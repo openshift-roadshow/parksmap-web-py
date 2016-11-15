@@ -107,9 +107,9 @@ async def poll_services():
         # XXX This is currently polling the backend service each time
         # for details. This will cause Python backend to be kept alive
         # and will not restart due to inactivity. Even if details don't
-        # change we aren't currently update user interface anyway as
-        # notifications not working and we aren't looking for any
-        # differences in details, only if a backed was added or removed.
+        # change we aren't currently updating user interface anyway as
+        # we aren't looking for any differences in details, only if a
+        # backed was added or removed.
 
         for endpoint in endpoints:
             try:
@@ -146,9 +146,6 @@ async def poll_services():
         # Work out what services were added or removed since the last time
         # we ran this. Send notifications to the user interface about
         # whether services were added or removed.
-        #
-        # XXX These messages aren't getting through to the user interface
-        # and do not know why at this point.
 
         added = set()
         removed = set(backend_details.keys())
@@ -159,33 +156,32 @@ async def poll_services():
             if name not in backend_details:
                 added.add(name)
 
+        manager = sockjs.get_manager('clients', app)
+
+        def broadcast(topic, info):
+            for session in manager.sessions:
+                if not session.expired:
+                    if hasattr(session, 'subscriptions'):
+                        if topic in session.subscriptions:
+                            subscription = session.subscriptions[topic]
+
+                            headers = {}
+                            headers['subscription'] = subscription
+                            headers['content-type'] = 'application/json'
+                            headers['message-id'] = str(uuid.uuid1())
+
+                            body = json.dumps(info).encode('UTF-8')
+
+                            frame = StompFrame(command='MESSAGE',
+                                    headers=headers, body=body)
+
+                            session.send(bytes(frame).decode('UTF-8'))
+
         for name in removed:
-            info = backend_details[name]
-
-            headers = {}
-            headers['subscription'] = '/topic/remove'
-            headers['content-type'] = 'application/json'
-            headers['message-id'] = str(uuid.uuid1())
-
-            msg = StompFrame(command='MESSAGE', headers=headers,
-                    body=json.dumps(info).encode('UTF-8'))
-
-            manager = sockjs.get_manager('clients', app)
-            manager.broadcast(bytes(msg))
+            broadcast('/topic/remove', backend_details[name][1])
 
         for name in added:
-            info = details[name][1]
-
-            headers = {}
-            headers['subscription'] = '/topic/add'
-            headers['content-type'] = 'application/json'
-            headers['message-id'] = str(uuid.uuid1())
-
-            msg = StompFrame(command='MESSAGE', headers=headers,
-                    body=json.dumps(info).encode('UTF-8'))
-
-            manager = sockjs.get_manager('clients', app)
-            manager.broadcast(bytes(msg))
+            broadcast('/topic/add', details[name][1])
 
         # Update our global record of what services we know about.
 
@@ -199,33 +195,45 @@ async def poll_services():
 
 app = web.Application()
 
-# The websocket endpoint.
-#
-# XXX This isn't entirely working. The bit below seems to be okay and
-# see a CONNECT message for Stomp, but don't receive an SUBSCRIBE messages
-# and sending back messages above doesn't appear to work either. Not sure
-# what is going on.
+# The websocket endpoint. SockJS is used for basic transport over the
+# web socket and then Stomp messaging is used on top. The Stomp module
+# only provides message framing, so we need to implemented the
+# handshakes ourself which the JS Stomp client is expecting.
 
 def socks_backend(msg, session):
-    logging.info('MESG %r %r', msg, session)
-
     parser = StompParser('1.1')
 
     if msg.data:
         parser.add(msg.data.encode('UTF-8'))
 
-    data = parser.get()
-    logging.info('DATA %r', data)
+    frame = parser.get()
 
     manager = sockjs.get_manager('clients', app)
-    logging.info('SESSIONS %r', manager.sessions)
 
     if msg.tp == sockjs.MSG_OPEN:
         pass
+
     elif msg.tp == sockjs.MSG_MESSAGE:
-        pass
+        if frame.command == 'CONNECT':
+            headers = {}
+            headers['session'] = session.id
+
+            msg = StompFrame(command='CONNECTED', headers=headers)
+
+            session.send(bytes(msg).decode('UTF-8'))
+
+            session.subscriptions = {}
+
+        elif frame.command == 'SUBSCRIBE':
+            subscription = frame.headers['id']
+            session.subscriptions[frame.headers['destination']] = subscription
+
+        elif frame.command == 'UNSUBSCRIBE':
+            del session.subscriptions[frame.headers['destination']]
+
     elif msg.tp == sockjs.MSG_CLOSE:
         pass
+
     elif msg.tp == sockjs.MSG_CLOSED:
         pass
 
