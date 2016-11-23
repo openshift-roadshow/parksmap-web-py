@@ -49,28 +49,62 @@ def get_services(namespace=None):
 
     return client.api.v1.namespaces(namespace=namespace).services.get().items
 
+def get_routes(namespace=None):
+    if namespace is None:
+        namespace = project_name()
+
+    client = endpoints.Client()
+
+    return client.oapi.v1.namespaces(namespace=namespace).routes.get().items
+
+def public_address(route):
+    # Assume that public HTTP port is always port 80 and HTTPS port is
+    # always port 443 and these aren't mapped to something else.
+
+    host = route.spec.host
+    path = route.spec.path or '/'
+    if route.spec.tls:
+        return 'https://%s%s' % (host, path)
+    return 'http://%s%s' % (host, path)
+
 def get_backends():
+    # We find backends by looking for a 'type' label on either services
+    # or routes. If a service we use its internal address. If a route
+    # we use the external address. Ensure we eliminate where label has
+    # been applied to both as transition to use of routes.
+
     services = get_services()
 
     backends = []
 
-    for service in services:
-        # Important to ensire that we protect against case where there
-        # are no labels as labels attribute will be None in that case.
-        # We are only interested in services with a 'type' label which
-        # matches 'parksmap-backend'.
+    names = set()
 
+    for service in services:
         if service.metadata.labels:
             if 'type' in service.metadata.labels:
                 if service.metadata.labels['type'] == 'parksmap-backend':
                     port = service.spec.ports[0].port
-                    name = '%s:%s' % (service.metadata.name, port)
-                    backends.append(name)
+                    name = service.metadata.name
+                    url = 'http://%s:%s/' % (name, port)
+                    backends.append((name, url))
+                    names.add(name)
+
+    routes = get_routes()
+
+    for route in routes:
+        if route.metadata.labels:
+            if 'type' in route.metadata.labels:
+                if route.metadata.labels['type'] == 'parksmap-backend':
+                    name = route.metadata.name
+                    url = public_address(route)
+                    if name not in names:
+                        backends.append((name, url))
+                        names.add(name)
 
     return backends
 
-def get_backend_info(name):
-    url = 'http://%s/ws/info/' % name
+def get_backend_info(name, url):
+    url = url + 'ws/info/'
 
     response = requests.get(url)
 
@@ -111,9 +145,9 @@ async def poll_services():
         # we aren't looking for any differences in details, only if a
         # backed was added or removed.
 
-        for endpoint in endpoints:
+        for name, url in endpoints:
             try:
-                info = await loop.run_in_executor(None, get_backend_info, endpoint)
+                info = await loop.run_in_executor(None, get_backend_info, name, url)
             except Exception:
                 pass
             else:
@@ -136,12 +170,10 @@ async def poll_services():
                 # If the service details didn't include an 'id' fill
                 # it in with the name of the service.
 
-                name = endpoint.split(':')[0]
-
                 if 'id' not in info:
                     info['id'] = name
 
-                details[info['id']] = (endpoint, info)
+                details[info['id']] = (name, url, info)
 
         # Work out what services were added or removed since the last time
         # we ran this. Send notifications to the user interface about
@@ -177,11 +209,13 @@ async def poll_services():
 
                             session.send(bytes(frame).decode('UTF-8'))
 
-        for name in removed:
-            broadcast('/topic/remove', backend_details[name][1])
+        for key in removed:
+            name, url, info = backend_details[key]
+            broadcast('/topic/remove', info)
 
-        for name in added:
-            broadcast('/topic/add', details[name][1])
+        for key in added:
+            name, url, info = details[key]
+            broadcast('/topic/add', info)
 
         # Update our global record of what services we know about.
 
@@ -242,7 +276,7 @@ sockjs.add_endpoint(app, socks_backend, name='clients', prefix='/socks-backends/
 # Our REST API endpoints which the web interface uses.
 
 async def backends_list(request):
-    details = [item[1] for item in backend_details.values()]
+    details = [info for name, url, info in backend_details.values()]
     return web.json_response(details)
 
 app.router.add_get('/ws/backends/list', backends_list)
@@ -250,8 +284,8 @@ app.router.add_get('/ws/backends/list', backends_list)
 async def data_all(request):
     service = request.rel_url.query['service']
 
-    name, info = backend_details[service]
-    url = 'http://%s/ws/data/all' % name
+    name, url, info = backend_details[service]
+    url =  url + 'ws/data/all'
 
     # XXX Need to find a better way of doing this. It currently reads
     # the whole data set into memory before returning it. Need to work
@@ -271,8 +305,8 @@ app.router.add_get('/ws/data/all', data_all)
 async def data_within(request):
     service = request.rel_url.query['service']
 
-    name, info = backend_details[service]
-    url = 'http://%s/ws/data/within' % name
+    name, url, info = backend_details[service]
+    url = url + 'ws/data/within'
 
     # XXX Need to find a better way of doing this. It currently reads
     # the whole data set into memory before returning it. Need to work
