@@ -1,0 +1,15 @@
+docker build -t "openshiftroadshow/parksmap-py:latest" .
+
+echo "-------------------------------------------"
+echo ""
+echo "Now to publish the image in dockerhub do:"
+echo ""
+echo " docker login # With your docker credentials"
+echo ""
+echo " docker tag openshiftroadshow/parksmap-py:latest openshiftroadshow/parksmap-py:<VERSION>"
+echo ""
+echo " docker push openshiftroadshow/parksmap-py:<VERSION>"
+echo ""
+echo " NOTE: Replace <VERSION> with the actual version of the image you're building"
+echo ""
+echo "-------------------------------------------"
