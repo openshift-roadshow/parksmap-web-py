@@ -97,6 +97,33 @@ def get_pods_for_service(service, namespace=None):
 
     return matches
 
+def get_service(name, namespace=None):
+    services = get_services(namespace)
+
+    for service in services:
+        if service.metadata.name == name:
+            return service
+
+def get_services_for_route(route, namespace=None):
+    services = []
+
+    primary = route.spec.to
+
+    def verify_has_pods(backend):
+        if backend.kind == 'Service' and backend.weight != 0:
+            service = get_service(backend.name, namespace)
+            if service:
+                if get_pods_for_service(service, namespace):
+                    services.append(service)
+
+    verify_has_pods(primary)
+
+    if 'alternate_backends' in route.spec:
+        for backend in route.spec.alternate_backends:
+            verify_has_pods(backend)
+
+    return services
+
 def public_address(route):
     # Assume that public HTTP port is always port 80 and HTTPS port is
     # always port 443 and these aren't mapped to something else.
@@ -109,10 +136,10 @@ def public_address(route):
 
 def get_backends(namespace=None):
     # We find backends by looking for a 'type' label on either services
-    # or routes. For a service it must currently have active pods. If a
-    # service we use its internal service address. If a route we use the
-    # external address. Ensure we eliminate where label has been applied
-    # to both as transition to use of routes.
+    # or routes. Only return backends that currently have active pods.
+    # If a service we use its internal service address. If a route we
+    # use the external address. Ensure we eliminate where label has been
+    # applied to both as transition to use of routes.
 
     services = get_services(namespace)
 
@@ -124,8 +151,7 @@ def get_backends(namespace=None):
         if service.metadata.labels:
             if 'type' in service.metadata.labels:
                 if service.metadata.labels['type'] == 'parksmap-backend':
-                    pods = get_pods_for_service(service, namespace)
-                    if pods:
+                    if get_pods_for_service(service, namespace):
                         port = service.spec.ports[0].port
                         name = service.metadata.name
                         url = 'http://%s:%s/' % (name, port)
@@ -138,11 +164,12 @@ def get_backends(namespace=None):
         if route.metadata.labels:
             if 'type' in route.metadata.labels:
                 if route.metadata.labels['type'] == 'parksmap-backend':
-                    name = route.metadata.name
-                    url = public_address(route)
-                    if name not in names:
-                        backends.append((name, url))
-                        names.add(name)
+                    if get_services_for_route(route, namespace):
+                        name = route.metadata.name
+                        url = public_address(route)
+                        if name not in names:
+                            backends.append((name, url))
+                            names.add(name)
 
     return backends
 
