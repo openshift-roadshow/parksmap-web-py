@@ -28,18 +28,26 @@ requests.packages.urllib3.disable_warnings()
 # backend services.
 
 def project_name():
+    # Can look up name of project from service account secrets.
+
+    with open('/run/secrets/kubernetes.io/serviceaccount/namespace') as fp:
+        project = fp.read()
+
+    # We still want to validate that the REST API access is also enabled.
+
     client = endpoints.Client()
 
     projects = client.oapi.v1.projects.get()
 
-    # If REST API endpoint access is not enabled the list of projects
-    # will be empty and things will fail. Where is not empty, we assume
-    # that the current project is the first in the list.
+    # If REST API access is not enabled the list of projects will be empty
+    # as we should at least see our own project.
 
     if not projects.items:
-        logging.fatal('OpenShift REST API access not enabled.')
+        logging.fatal('OpenShift REST API access not enabled. To enable '
+                'access, run the command "oc adm policy add-role-to-group '
+                'view system:serviceaccounts:%s"' % project)
 
-    return projects.items[0].metadata.name
+    return project
 
 def get_services(namespace=None):
     if namespace is None:
