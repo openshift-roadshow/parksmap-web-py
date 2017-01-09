@@ -27,7 +27,7 @@ requests.packages.urllib3.disable_warnings()
 # Routines for interrogating the OpenShift REST API to look up list of
 # backend services.
 
-def project_name():
+async def project_name():
     # Can look up name of project from service account secrets.
 
     with open('/run/secrets/kubernetes.io/serviceaccount/namespace') as fp:
@@ -35,9 +35,9 @@ def project_name():
 
     # We still want to validate that the REST API access is also enabled.
 
-    client = endpoints.Client()
+    client = endpoints.AsyncClient()
 
-    projects = client.oapi.v1.projects.get()
+    projects = await client.oapi.v1.projects.get()
 
     # If REST API access is not enabled the list of projects will be empty
     # as we should at least see our own project.
@@ -49,36 +49,42 @@ def project_name():
 
     return project
 
-def get_services(namespace=None):
+async def get_services(namespace=None):
     if namespace is None:
-        namespace = project_name()
+        namespace = await project_name()
 
-    client = endpoints.Client()
+    client = endpoints.AsyncClient()
 
-    return client.api.v1.namespaces(namespace=namespace).services.get().items
+    services = await client.api.v1.namespaces(namespace=namespace).services.get()
 
-def get_routes(namespace=None):
+    return services.items
+
+async def get_routes(namespace=None):
     if namespace is None:
-        namespace = project_name()
+        namespace = await project_name()
 
-    client = endpoints.Client()
+    client = endpoints.AsyncClient()
 
-    return client.oapi.v1.namespaces(namespace=namespace).routes.get().items
+    routes = await client.oapi.v1.namespaces(namespace=namespace).routes.get()
+    
+    return routes.items
 
-def get_pods(namespace=None):
+async def get_pods(namespace=None):
     if namespace is None:
-        namespace = project_name()
+        namespace = await project_name()
 
-    client = endpoints.Client()
+    client = endpoints.AsyncClient()
 
-    return client.api.v1.namespaces(namespace=namespace).pods.get().items
+    pods = await client.api.v1.namespaces(namespace=namespace).pods.get()
+    
+    return pods.items
 
-def get_pods_for_service(service, namespace=None):
+async def get_pods_for_service(service, namespace=None):
     # Determine the list of pods which are associated with a service.
 
     selector = service.spec.selector
 
-    pods = get_pods(namespace)
+    pods = await get_pods(namespace)
 
     matches = []
 
@@ -97,30 +103,30 @@ def get_pods_for_service(service, namespace=None):
 
     return matches
 
-def get_service(name, namespace=None):
-    services = get_services(namespace)
+async def get_service(name, namespace=None):
+    services = await get_services(namespace)
 
     for service in services:
         if service.metadata.name == name:
             return service
 
-def get_services_for_route(route, namespace=None):
+async def get_services_for_route(route, namespace=None):
     services = []
 
     primary = route.spec.to
 
-    def verify_has_pods(backend):
+    async def verify_has_pods(backend):
         if backend.kind == 'Service' and backend.weight != 0:
-            service = get_service(backend.name, namespace)
+            service = await get_service(backend.name, namespace)
             if service:
-                if get_pods_for_service(service, namespace):
+                if await get_pods_for_service(service, namespace):
                     services.append(service)
 
-    verify_has_pods(primary)
+    await verify_has_pods(primary)
 
     if 'alternate_backends' in route.spec:
         for backend in route.spec.alternate_backends:
-            verify_has_pods(backend)
+            await verify_has_pods(backend)
 
     return services
 
@@ -134,14 +140,14 @@ def public_address(route):
         return 'https://%s%s' % (host, path)
     return 'http://%s%s' % (host, path)
 
-def get_backends(namespace=None):
+async def get_backends(namespace=None):
     # We find backends by looking for a 'type' label on either services
     # or routes. Only return backends that currently have active pods.
     # If a service we use its internal service address. If a route we
     # use the external address. Ensure we eliminate where label has been
     # applied to both as transition to use of routes.
 
-    services = get_services(namespace)
+    services = await get_services(namespace)
 
     backends = []
 
@@ -151,20 +157,20 @@ def get_backends(namespace=None):
         if service.metadata.labels:
             if 'type' in service.metadata.labels:
                 if service.metadata.labels['type'] == 'parksmap-backend':
-                    if get_pods_for_service(service, namespace):
+                    if await get_pods_for_service(service, namespace):
                         port = service.spec.ports[0].port
                         name = service.metadata.name
                         url = 'http://%s:%s/' % (name, port)
                         backends.append((name, url))
                         names.add(name)
 
-    routes = get_routes(namespace)
+    routes = await get_routes(namespace)
 
     for route in routes:
         if route.metadata.labels:
             if 'type' in route.metadata.labels:
                 if route.metadata.labels['type'] == 'parksmap-backend':
-                    if get_services_for_route(route, namespace):
+                    if await get_services_for_route(route, namespace):
                         name = route.metadata.name
                         url = public_address(route)
                         if name not in names:
@@ -173,15 +179,19 @@ def get_backends(namespace=None):
 
     return backends
 
-def get_backend_info(name, url):
+async def get_backend_info(url):
     url = url + 'ws/info/'
 
-    response = requests.get(url)
+    async with ClientSession() as session:
+        async with session.get(url) as response:
+            data = await response.read()
 
-    if response.status_code != requests.codes.ok:
+    if response.status != 200:
         return None
 
-    return response.json()
+    data = json.loads(data.decode('UTF-8'))
+
+    return data
 
 # Background task that periodically polls the list of backend services.
 # The main task is a normal async task, but it executes calls to the
@@ -200,7 +210,7 @@ async def poll_services():
         # Get the list of services with our label.
 
         try:
-            endpoints = await loop.run_in_executor(None, get_backends)
+            endpoints = await get_backends()
         except Exception:
             logging.exception('Could not query backends.')
             continue
@@ -217,8 +227,8 @@ async def poll_services():
 
         for name, url in endpoints:
             try:
-                info = await loop.run_in_executor(None, get_backend_info, name, url)
-            except Exception:
+                info = await get_backend_info(url)
+            except Exception as e:
                 pass
             else:
                 # We will get None if lookup of details failed for service.
