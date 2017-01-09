@@ -186,12 +186,21 @@ async def get_backend_info(url):
         async with session.get(url) as response:
             data = await response.read()
 
-    if response.status != 200:
-        return None
+    if response.status == 200:
+        info = json.loads(data.decode('UTF-8'))
 
-    data = json.loads(data.decode('UTF-8'))
+        # We need to fill in some defaults for values if the
+        # service doesn't define them as the user interface
+        # expects all fields to be populated.
 
-    return data
+        info.setdefault('center', {"latitude":"0.0","longitude":"0.0"})
+        info.setdefault('zoom', 1)
+        info.setdefault('maxZoom', 1)
+        info.setdefault('type', 'cluster')
+        info.setdefault('visible', 'true')
+        info.setdefault('scope', 'all')
+
+        return info
 
 # Background task that periodically polls the list of backend services.
 # The main task is a normal async task, but it executes calls to the
@@ -235,17 +244,6 @@ async def poll_services():
 
                 if info is None:
                     continue
-
-                # We need to fill in some defaults for values if the
-                # service doesn't define them as the user interface
-                # expects all fields to be populated.
-
-                info.setdefault('center', {"latitude":"0.0","longitude":"0.0"})
-                info.setdefault('zoom', 1)
-                info.setdefault('maxZoom', 1)
-                info.setdefault('type', 'cluster')
-                info.setdefault('visible', 'true')
-                info.setdefault('scope', 'all')
 
                 # Ignore the backend if it doesn't provide an id field.
 
