@@ -208,6 +208,27 @@ async def get_backend_info(url):
 
 backend_details = {}
 
+def broadcast_message(topic, info):
+    manager = sockjs.get_manager('clients', app)
+
+    for session in manager.sessions:
+        if not session.expired:
+            if hasattr(session, 'subscriptions'):
+                if topic in session.subscriptions:
+                    subscription = session.subscriptions[topic]
+
+                    headers = {}
+                    headers['subscription'] = subscription
+                    headers['content-type'] = 'application/json'
+                    headers['message-id'] = str(uuid.uuid1())
+
+                    body = json.dumps(info).encode('UTF-8')
+
+                    frame = StompFrame(command='MESSAGE',
+                            headers=headers, body=body)
+
+                    session.send(bytes(frame).decode('UTF-8'))
+
 async def poll_services():
     global backend_details
 
@@ -265,34 +286,13 @@ async def poll_services():
             if name not in backend_details:
                 added.add(name)
 
-        manager = sockjs.get_manager('clients', app)
-
-        def broadcast(topic, info):
-            for session in manager.sessions:
-                if not session.expired:
-                    if hasattr(session, 'subscriptions'):
-                        if topic in session.subscriptions:
-                            subscription = session.subscriptions[topic]
-
-                            headers = {}
-                            headers['subscription'] = subscription
-                            headers['content-type'] = 'application/json'
-                            headers['message-id'] = str(uuid.uuid1())
-
-                            body = json.dumps(info).encode('UTF-8')
-
-                            frame = StompFrame(command='MESSAGE',
-                                    headers=headers, body=body)
-
-                            session.send(bytes(frame).decode('UTF-8'))
-
         for key in removed:
             name, url, info = backend_details[key]
-            broadcast('/topic/remove', info)
+            broadcast_message('/topic/remove', info)
 
         for key in added:
             name, url, info = details[key]
-            broadcast('/topic/add', info)
+            broadcast_message('/topic/add', info)
 
         # Update our global record of what services we know about.
 
