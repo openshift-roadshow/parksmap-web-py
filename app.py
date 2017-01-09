@@ -247,11 +247,10 @@ async def poll_services():
                 info.setdefault('visible', 'true')
                 info.setdefault('scope', 'all')
 
-                # If the service details didn't include an 'id' fill
-                # it in with the name of the service.
+                # Ignore the backend if it doesn't provide an id field.
 
                 if 'id' not in info:
-                    info['id'] = name
+                    continue
 
                 details[info['id']] = (name, url, info)
 
