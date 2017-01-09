@@ -229,7 +229,7 @@ def broadcast_message(topic, info):
 
                     session.send(bytes(frame).decode('UTF-8'))
 
-async def poll_services():
+async def poll_backends():
     global backend_details
 
     loop = asyncio.get_event_loop()
@@ -419,7 +419,7 @@ if __name__ == '__main__':
 
     # Start up our background task to poll for backend services.
 
-    asyncio.ensure_future(poll_services(), loop=loop)
+    asyncio.ensure_future(poll_backends(), loop=loop)
 
     # Run the aiohttpd server.
 
