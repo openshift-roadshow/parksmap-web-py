@@ -2,6 +2,7 @@ import logging
 import uuid
 import json
 import asyncio
+import os
 
 import requests
 
@@ -240,7 +241,13 @@ async def poll_services():
         # Get the list of services with our label.
 
         try:
-            endpoints = await get_backends()
+            default_backend = os.environ.get('PARKSMAP_BACKEND')
+
+            if default_backend:
+                endpoints = [(default_backend, 'http://%s:8080/' % default_backend)]
+            else:
+                endpoints = await get_backends()
+
         except Exception:
             logging.exception('Could not query backends.')
             continue
