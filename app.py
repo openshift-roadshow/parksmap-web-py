@@ -250,6 +250,11 @@ async def poll_services():
 
         except Exception:
             logging.exception('Could not query backends.')
+
+            # Wait a while and then update list again.
+
+            await asyncio.sleep(15.0)
+
             continue
 
         # Query details for each backend service. The end point is
