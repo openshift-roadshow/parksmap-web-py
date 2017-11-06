@@ -1,5 +1,5 @@
-aiohttp<2.3.0
+aiohttp<2.0.0
 sockjs<0.6.0
-stompest
+stompest<2.3.0
 powershift
 requests
