@@ -1,0 +1,15 @@
+docker build -t "openshiftroadshow/parksmap-katacoda:latest" .
+
+echo "-------------------------------------------"
+echo ""
+echo "Now to publish the image in dockerhub do:"
+echo ""
+echo " docker login # With your docker credentials"
+echo ""
+echo " docker tag openshiftroadshow/parksmap-katacoda:latest openshiftroadshow/parksmap-katacoda:<VERSION>"
+echo ""
+echo " docker push openshiftroadshow/parksmap-katacoda:<VERSION>"
+echo ""
+echo " NOTE: Replace <VERSION> with the actual version of the image you're building"
+echo ""
+echo "-------------------------------------------"
