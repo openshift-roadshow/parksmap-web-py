@@ -41,8 +41,8 @@ async def project_name():
 
     if not projects.items:
         logging.fatal('OpenShift REST API access not enabled. To enable '
-                'access, run the command "oc adm policy add-role-to-group '
-                'view -k default')
+                'access, run the command "oc policy add-role-to-user '
+                'view -z default"')
 
     # We also need to check though that our project is in the list which is
     # returned because wrong permissions on other projects in the cluster
@@ -56,8 +56,8 @@ async def project_name():
             return name
 
     logging.fatal('OpenShift REST API access not enabled. To enable '
-            'access, run the command "oc adm policy add-role-to-group '
-            'view -k default')
+            'access, run the command "oc policy add-role-to-user '
+            'view -z default"')
 
     return None
 
