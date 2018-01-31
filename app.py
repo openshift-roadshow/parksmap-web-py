@@ -3,6 +3,7 @@ import uuid
 import json
 import asyncio
 import os
+import signal
 
 import requests
 
@@ -428,6 +429,19 @@ app.router.add_static('/', 'static')
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
+
+    @asyncio.coroutine 
+    def shutdown_application():
+        logging.info('Application stopped')
+        loop.stop()
+
+    def schedule_shutdown():                          
+        logging.info('Stopping application')
+        for task in asyncio.Task.all_tasks():
+            task.cancel()                    
+        asyncio.ensure_future(shutdown_application()) 
+
+    loop.add_signal_handler(signal.SIGTERM, schedule_shutdown)
 
     # Start up our background task to poll for backend services.
 
