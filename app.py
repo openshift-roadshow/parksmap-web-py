@@ -30,11 +30,6 @@ requests.packages.urllib3.disable_warnings()
 # backend services.
 
 async def project_name():
-    # Can look up name of project from service account secrets.
-
-    with open('/run/secrets/kubernetes.io/serviceaccount/namespace') as fp:
-        project = fp.read()
-
     # We still want to validate that the REST API access is also enabled.
 
     client = endpoints.AsyncClient()
@@ -47,13 +42,31 @@ async def project_name():
     if not projects.items:
         logging.fatal('OpenShift REST API access not enabled. To enable '
                 'access, run the command "oc adm policy add-role-to-group '
-                'view system:serviceaccounts:%s"' % project)
+                'view -k default')
 
-    return project
+    # We also need to check though that our project is in the list which is
+    # returned because wrong permissions on other projects in the cluster
+    # could expose them to us even if REST API access is enabled.
+
+    with open('/run/secrets/kubernetes.io/serviceaccount/namespace') as fp:
+        name = fp.read()
+
+    for project in projects.items:
+        if project.metadata.name == name:
+            return name
+
+    logging.fatal('OpenShift REST API access not enabled. To enable '
+            'access, run the command "oc adm policy add-role-to-group '
+            'view -k default')
+
+    return None
 
 async def get_services(namespace=None):
     if namespace is None:
         namespace = await project_name()
+
+    if namespace is None:
+        return []
 
     client = endpoints.AsyncClient()
 
@@ -64,6 +77,9 @@ async def get_services(namespace=None):
 async def get_routes(namespace=None):
     if namespace is None:
         namespace = await project_name()
+
+    if namespace is None:
+        return []
 
     client = endpoints.AsyncClient()
 
