@@ -44,6 +44,8 @@ async def project_name():
                 'access, run the command "oc policy add-role-to-user '
                 'view -z default"')
 
+        return
+
     # We also need to check though that our project is in the list which is
     # returned because wrong permissions on other projects in the cluster
     # could expose them to us even if REST API access is enabled.
@@ -58,8 +60,6 @@ async def project_name():
     logging.fatal('OpenShift REST API access not enabled. To enable '
             'access, run the command "oc policy add-role-to-user '
             'view -z default"')
-
-    return None
 
 async def get_services(namespace=None):
     if namespace is None:
@@ -165,6 +165,12 @@ async def get_backends(namespace=None):
     # If a service we use its internal service address. If a route we
     # use the external address. Ensure we eliminate where label has been
     # applied to both as transition to use of routes.
+
+    if namespace is None:
+        namespace = await project_name()
+
+    if namespace is None:
+        return []
 
     services = await get_services(namespace)
 
