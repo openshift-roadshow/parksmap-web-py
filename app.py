@@ -66,26 +66,26 @@ async def get_services(namespace=None):
         namespace = await project_name()
 
     if namespace is None:
-        return []
+        return None
 
     client = endpoints.AsyncClient()
 
     services = await client.api.v1.namespaces(namespace=namespace).services.get()
 
-    return services.items
+    return services
 
 async def get_routes(namespace=None):
     if namespace is None:
         namespace = await project_name()
 
     if namespace is None:
-        return []
+        return None
 
     client = endpoints.AsyncClient()
 
     routes = await client.oapi.v1.namespaces(namespace=namespace).routes.get()
     
-    return routes.items
+    return routes
 
 async def get_pods(namespace=None):
     if namespace is None:
@@ -124,9 +124,10 @@ async def get_pods_for_service(service, namespace=None):
 async def get_service(name, namespace=None):
     services = await get_services(namespace)
 
-    for service in services:
-        if service.metadata.name == name:
-            return service
+    if services is not None:
+        for service in services.items:
+            if service.metadata.name == name:
+                return service
 
 async def get_services_for_route(route, namespace=None):
     services = []
@@ -171,29 +172,31 @@ async def get_backends(namespace=None):
 
     names = set()
 
-    for service in services:
-        if service.metadata.labels:
-            if 'type' in service.metadata.labels:
-                if service.metadata.labels['type'] == 'parksmap-backend':
-                    if await get_pods_for_service(service, namespace):
-                        port = service.spec.ports[0].port
-                        name = service.metadata.name
-                        url = 'http://%s:%s/' % (name, port)
-                        backends.append((name, url))
-                        names.add(name)
+    if services is not None:
+        for service in services.items:
+            if service.metadata.labels:
+                if 'type' in service.metadata.labels:
+                    if service.metadata.labels['type'] == 'parksmap-backend':
+                        if await get_pods_for_service(service, namespace):
+                            port = service.spec.ports[0].port
+                            name = service.metadata.name
+                            url = 'http://%s:%s/' % (name, port)
+                            backends.append((name, url))
+                            names.add(name)
 
     routes = await get_routes(namespace)
 
-    for route in routes:
-        if route.metadata.labels:
-            if 'type' in route.metadata.labels:
-                if route.metadata.labels['type'] == 'parksmap-backend':
-                    if await get_services_for_route(route, namespace):
-                        name = route.metadata.name
-                        url = public_address(route)
-                        if name not in names:
-                            backends.append((name, url))
-                            names.add(name)
+    if routes is not None:
+        for route in routes.items:
+            if route.metadata.labels:
+                if 'type' in route.metadata.labels:
+                    if route.metadata.labels['type'] == 'parksmap-backend':
+                        if await get_services_for_route(route, namespace):
+                            name = route.metadata.name
+                            url = public_address(route)
+                            if name not in names:
+                                backends.append((name, url))
+                                names.add(name)
 
     return backends
 
