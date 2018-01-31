@@ -261,7 +261,9 @@ async def poll_backends():
             default_backend = os.environ.get('PARKSMAP_BACKEND')
 
             if default_backend:
-                endpoints = [(default_backend, 'http://%s:8080/' % default_backend)]
+                endpoints = []
+                for backend in default_backend.split(','):
+                    endpoints.append((backend, 'http://%s:8080/' % backend))
             else:
                 endpoints = await get_backends()
 
