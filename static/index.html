@@ -174,12 +174,11 @@
 
 	var backends = new Map();
 
-	var mbAttr = 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, ' +
-					'<a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a> '
-			mbUrl = 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+	var osAttr = 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, ' +
+					'<a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>'
+			osUrl = 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-
-	var base = L.tileLayer(mbUrl);
+			var base = L.tileLayer(osUrl);
 
 	var map = L.map('map', {
 		center: [27.60567, -18.19336],
@@ -189,8 +188,7 @@
 
 	var baseLayers = {
 		"Base Layer": base
-	};
-
+	}
 	var overlays = {};
 
 	var controls = L.control.layers(baseLayers, overlays, {collapsed:false} );
